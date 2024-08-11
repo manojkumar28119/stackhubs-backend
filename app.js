@@ -58,71 +58,74 @@ app.post("/add-order", async (request, response) => {
     `;
   }
 
-  await db.run(addOrderQuery);
-
-  await getData();
-
-  response.send("Order added");
+  if (price > 0 && qty > 0) {
+    await db.run(addOrderQuery);
+    await getData();
+    response.send("Order added");
+  } else if (qty <= 0) {
+    response.status(400).send("Quantity should be greater than 0");
+  } else {
+    response.status(400).send("Price should be greater than 0");
+  }
 });
 
 const getData = async () => {
-  const matechedPriceQuery = `
-    SELECT BuyerOrderTable.id as buyer_id,SellerOrderTable.id as seller_id,
-    buyer_price, buyer_qty,seller_price,seller_qty FROM BuyerOrderTable INNER JOIN SellerOrderTable ON BuyerOrderTable.buyer_price >= SellerOrderTable.seller_price;
+  const matchedPriceQuery = `
+    SELECT 
+      BuyerOrderTable.id as buyer_id, 
+      SellerOrderTable.id as seller_id,
+      buyer_price, 
+      buyer_qty, 
+      seller_price, 
+      seller_qty 
+    FROM BuyerOrderTable 
+    INNER JOIN SellerOrderTable 
+    ON BuyerOrderTable.buyer_price >= SellerOrderTable.seller_price;
   `;
 
-  const data = await db.get(matechedPriceQuery);
-  console.log(data);
+  const data = await db.get(matchedPriceQuery);
 
   if (data !== undefined) {
-    const { buyer_qty, seller_qty, buyer_id, seller_id,buyer_price} = data;
+    const { buyer_qty, seller_qty, buyer_id, seller_id, buyer_price } = data;
 
     const new_buyer_qty = buyer_qty >= seller_qty ? buyer_qty - seller_qty : 0;
-
-    const buyerUpdateQuery = `
-    UPDATE BuyerOrderTable 
-    SET buyer_qty = ${new_buyer_qty}
-    WHERE id = ${buyer_id}
-  `;
-
-    await db.run(buyerUpdateQuery);
-
     const new_seller_qty = seller_qty >= buyer_qty ? seller_qty - buyer_qty : 0;
 
+    const buyerUpdateQuery = `
+      UPDATE BuyerOrderTable 
+      SET buyer_qty = ${new_buyer_qty}
+      WHERE id = ${buyer_id}
+    `;
     const sellerUpdateQuery = `
-    UPDATE  SellerOrderTable
-    SET seller_qty = ${new_seller_qty}
-    WHERE id = ${seller_id}
-  `;
+      UPDATE SellerOrderTable 
+      SET seller_qty = ${new_seller_qty}
+      WHERE id = ${seller_id}
+    `;
 
-
-  const updateSellerTable = `
-    DELETE FROM SellerOrderTable 
-    WHERE seller_qty = 0
-  `
-
-  const updateBuyerTable = `
-    DELETE FROM  BuyerOrderTable
-    WHERE buyer_qty = 0
-  `
-
+    await db.run(buyerUpdateQuery);
     await db.run(sellerUpdateQuery);
 
-    await db.run(updateBuyerTable); 
-    await db.run(updateSellerTable); 
+    const deleteBuyerQuery = `
+      DELETE FROM BuyerOrderTable 
+      WHERE buyer_qty = 0;
+    `;
+    const deleteSellerQuery = `
+      DELETE FROM SellerOrderTable 
+      WHERE seller_qty = 0;
+    `;
 
-    const completedQnty = Math.min(seller_qty,buyer_qty);
+    await db.run(deleteBuyerQuery);
+    await db.run(deleteSellerQuery);
 
-      
+    const completedQty = Math.min(seller_qty, buyer_qty);
 
+    const completedTableQ = `
+      INSERT INTO CompletedOrderTable (price, qty)
+      VALUES (${buyer_price}, ${completedQty});
+    `;
 
-    const completedTableQ = `INSERT INTO CompletedOrderTable(price,qty)
-    VALUES(${buyer_price},${completedQnty})`
-
-    await db.run(completedTableQ)
+    await db.run(completedTableQ);
   }
-
-  
 };
 
 initializeDBAndServer();
