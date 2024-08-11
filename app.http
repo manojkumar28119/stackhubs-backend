@@ -1,0 +1,19 @@
+POST http://localhost:3000/add-order
+Content-Type: application/json
+
+{
+    "type" :"buyer",
+    "qty": 55,
+    "price": 100
+}
+
+###
+
+POST http://localhost:3000/add-order
+Content-Type: application/json
+
+{
+    "type" :"seller",
+    "qty": 50,
+    "price": 100
+}
